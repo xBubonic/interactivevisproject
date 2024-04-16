@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Game Genre Analysis</title>
+    <style>
+        body {
+            background-color: #171a21; 
+            color: white; 
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center; 
+            align-items: center;
+            height: 100vh; 
+            margin: 0;
+        }
+        select {
+            color: black; 
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            background-color: white;
+            border: none;
+            cursor: pointer;
+            
+        }
+        label {
+            color: white;
+            font-size: 16px;
+            margin-bottom: 5px;
+            display: block;
+            
+        }
+
+        #visualization-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        svg {
+            display: block;
+            max-width: 100%;
+            margin: auto;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .axis path,
+        .axis line {
+            fill: none;
+            stroke: white; 
+            shape-rendering: crispEdges;
+        }
+        .axis text {
+            fill: white; 
+        }
+        .line {
+            fill: none;
+            stroke-width: 2px;
+            opacity: 0.8;
+        }
+        .highlighted {
+            stroke-width: 4px;
+            opacity: 1; 
+        }
+        .legend {
+            font-size: 12px;
+            cursor: pointer;
+            padding: 10px;
+            margin: 5px;
+            width: 120px; 
+            text-align: center;
+            border-radius: 8px; 
+            background-color: #fff; 
+            color: black; 
+        }
+        .legend-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center; 
+            margin-top: 20px;
+        }
+        .title {
+            margin-bottom: 10px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+    </style>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+</head>
+<body>
+    <div id="visualization-container">
+        <label for="genre-selector">Select a Genre:</label>
+        <select id="genre-selector">
+            <option value="combined_data_Shootersgenre.csv">Shooters</option>
+            <option value="combined_data_Shooters(No%20Outliers)genre.csv">Shooters (No Outliers)</option>
+            <option value="combined_data_Survivalgenre.csv">Survival</option>
+            <option value="combined_data_Survival(No%20Pal%20World)genre.csv">Survival (No Palworld)</option>
+            <option value="combined_data_RougeLikegenre.csv">Rouge Like</option>
+            <option value="combined_data_RPGgenre.csv">RPGs</option>
+            <option value="combined_data_MMOsgenre.csv">MMOs</option>
+            <option value="combined_data_BattleRoyalgenre.csv">Battle Royals</option>
+            
+            
+        </select>
+        <div id="title" class="title"></div>
+        <div id="visualization"></div>
+        <div class="legend-container"></div>
+    </div>
+
+    <script>
+        const margin = { top: 20, right: 90, bottom: 30, left: 70 },
+              width = 960 - margin.left - margin.right,
+              height = 500 - margin.top - margin.bottom;
+        const parseTime = d3.timeParse("%B %Y");
+        const x = d3.scaleTime().range([0, width]);
+        const y = d3.scaleLinear().range([height, 0]);
+        const customColors = [
+            "#6e40aa","#bf3caf","#fe4b83","#ff7847","#e2b72f","#aff05b","#52f667","#1ddfa3","#23abd8","#4c6edb","#6e40aa",
+            "#ff4040","#e78d0b","#e70b8d","#58fc2a","#18f472","#00bfbf","#1872f4","#582afc","#a703d5",
+        ];
+        const color = d3.scaleOrdinal(customColors);
+        const svg = d3.select("#visualization").append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+        const line = d3.line()
+            .x(d => x(d.date))
+            .y(d => y(d.value));
+
+        let legendContainer = d3.select(".legend-container");
+        let titleElement = document.getElementById("title");
+
+        document.getElementById('genre-selector').addEventListener('change', function(event) {
+            const selectedOptionText = event.target.options[event.target.selectedIndex].text;
+            loadChartData(event.target.value);
+            updateTitle(selectedOptionText); 
+        });
+        
+        function updateTitle(selectedOptionText) {
+            titleElement.textContent = "Average Monthly Player Count for " + selectedOptionText;
+        }
+
+
+        function loadChartData(filename) {
+            const filePath = `https://raw.githubusercontent.com/xBubonic/Interactive-Visualization/main/${filename}`;
+            const genre = filename.split("_")[2].replace("genre.csv", ""); 
+            updateTitle(genre.charAt(0).toUpperCase() + genre.slice(1)); // Update title
+
+            d3.dsv("|", filePath, d => {
+                return {
+                    date: parseTime(d.Month),
+                    value: +d["Avg. Players"],
+                    genre: d["Source File"]
+                };
+            }).then(function(data) {
+                data = data.filter(d => !(isNaN(d.date) || isNaN(d.value)));
+
+                x.domain(d3.extent(data, d => d.date));
+                y.domain([0, d3.max(data, d => d.value)]);
+                
+                svg.selectAll("*").remove();
+                legendContainer.selectAll("*").remove();
+
+                if (!document.getElementById('clear-selection-button')) {
+                    const clearButton = d3.select("#visualization-container").append("button")
+                        .attr('id', 'clear-selection-button') 
+                        .text("Clear Selection")
+                        .style("border-radius", "8px")
+                        .style("padding", "10px")
+                        .style("margin-top", "10px")
+                        .style("cursor", "pointer")
+                        .on("click", function() {
+                            d3.selectAll('.line').classed('highlighted', false).style('opacity', 1);
+                            d3.selectAll('.legend').style('opacity', 1);
+                        });
+                }
+
+                //rebuild the graph with new data
+                svg.append("g")
+                    .attr("transform", `translate(0,${height})`)
+                    .attr("class", "x axis")
+                    .call(d3.axisBottom(x));
+
+                svg.append("g")
+                    .attr("class", "y axis")
+                    .call(d3.axisLeft(y));
+
+                const genres = d3.group(data, d => d.genre);
+                const genreArray = Array.from(genres, ([key, value]) => ({ key, value }));
+
+                genreArray.forEach((genre, index) => {
+                    const path = svg.append("path")
+                        .datum(genre.value)
+                        .attr("fill", "none")
+                        .attr("stroke", color(index))
+                        .attr("stroke-width", 2)
+                        .attr("d", line)
+                        .attr("class", "line")
+                        .attr("id", genre.key.replace(/\s+/g, '-').toLowerCase());
+                });
+            
+            //update the legends 
+            legendContainer.selectAll(".legend")
+                .data(genreArray) 
+                .enter().append("div")
+                .attr("class", "legend")
+                .style("background-color", (d, i) => color(i))
+                .style("opacity", 1) 
+                .text(d => d.key)
+                .on("click", function(_, d) {
+                    const id = d.key.replace(/\s+/g, '-').toLowerCase();
+                    const lineElement = d3.select('#' + id);
+                    const alreadyHighlighted = lineElement.classed('highlighted');
+            
+                    
+                    lineElement.classed('highlighted', !alreadyHighlighted);
+            
+                    
+                    d3.selectAll('.line').style('opacity', 0.1);
+                    d3.selectAll('.legend').style('opacity', 0.1);
+            
+                    //find all highlighted elements and set them to full opacity
+                    d3.selectAll('.highlighted').each(function() {
+                        d3.select(this).style('opacity', 1);
+                        
+                        const key = this.id.replace(/\s+/g, '-').toLowerCase();
+                        d3.selectAll('.legend').each(function(l) {
+                            if (l.key.replace(/\s+/g, '-').toLowerCase() === key) {
+                                d3.select(this).style('opacity', 1);
+                            }
+                        });
+                    });
+            
+                    //if no elements are highlighted, reset all to full visibility
+                    if (d3.selectAll('.highlighted').empty()) {
+                        d3.selectAll('.line, .legend').style('opacity', 1);
+                    }
+                });
+            
+            const lines = svg.selectAll(".line")
+                .data(genreArray)
+                .enter().append("path")
+                  .attr("class", "line")
+                  .attr("d", d => line(d.value))
+                  .style("stroke", (d, i) => color(i))
+                  .attr("id", d => d.key.replace(/\s+/g, '-').toLowerCase());
+            
+            //hover function
+            const hoverLine = svg.append('line')
+                .style('stroke', '#fff')
+                .style('stroke-width', '1px')
+                .style('stroke-dasharray', '3,3')
+                .style('opacity', 0)
+                .attr('y1', 0)
+                .attr('y2', height);
+            
+            const hoverDot = svg.append('circle')
+                .attr('r', 4)
+                .style('fill', 'white')
+                .style('stroke', 'white')
+                .style('opacity', 0);
+            //stat box
+            const tooltipDiv = d3.select('body').append('div')
+                .attr('class', 'tooltip')
+                .style('opacity', 0)
+                .style('position', 'absolute')
+                .style('background', 'rgba(0, 0, 0, 0.75)')
+                .style('color', 'white')
+                .style('padding', '8px')
+                .style('border-radius', '4px')
+                .style('pointer-events', 'none');
+            
+            
+            function mousemove(event) {
+                const mouseX = d3.pointer(event, this)[0]; //'this' refera to the SVG element
+                const hoveredDate = x.invert(mouseX); //get date corresponding to the mouse x-coordinate
+            
+                let closestPoint;
+                let minDistance = Infinity;
+            
+                const highlightedLines = svg.selectAll('.line.highlighted');//hover only works when one game is selected
+                if (highlightedLines.size() !== 1) {
+                    //console.log("not one line highlighted:", highlightedLines.size());
+                    hoverLine.style('opacity', 0);
+                    hoverDot.style('opacity', 0);
+                    tooltipDiv.style('opacity', 0);
+                    return;
+                }
+            
+                highlightedLines.each(function(d) {
+                    const lineData = d3.select(this).datum().value;
+            
+                    lineData.forEach(function(d) {
+                        const currentX = x(d.date); 
+                        const distance = Math.abs(currentX - mouseX); 
+            
+                        if (distance < minDistance) {
+                            
+                            closestPoint = d;
+                            minDistance = distance;
+                        }
+                    });
+                });
+            
+                if (closestPoint) {
+                    //console.log("Closest point:", closestPoint);
+                    hoverLine
+                        .attr('x1', x(closestPoint.date))
+                        .attr('x2', x(closestPoint.date))
+                        .attr('y1', 0)
+                        .attr('y2', height)
+                        .style('opacity', 1);
+            
+                    hoverDot
+                        .attr('cx', x(closestPoint.date))
+                        .attr('cy', y(closestPoint.value))
+                        .style('opacity', 1);
+            
+                    tooltipDiv
+                        .html(`Date: ${d3.timeFormat("%B %Y")(closestPoint.date)}<br>Value: ${closestPoint.value.toLocaleString()}`)
+                        .style('opacity', 1)
+                        .style('left', `${event.pageX + 15}px`)
+                        .style('top', `${event.pageY - 28}px`);
+                } else {
+                    hoverLine.style('opacity', 0);
+                    hoverDot.style('opacity', 0);
+                    tooltipDiv.style('opacity', 0);
+                }
+            }
+            
+            
+            function mouseout() {
+                hoverLine.style('opacity', 0);
+                hoverDot.style('opacity', 0);
+                tooltipDiv.style('opacity', 0);
+            }
+            
+            svg.append('rect')
+                .attr('width', width)
+                .attr('height', height)
+                .style('fill', 'none')
+                .style('pointer-events', 'all')
+                .on('mousemove', function(event) { mousemove.call(this, event); }) // Use call to ensure 'this' refers to the SVG
+                .on('mouseout', mouseout);
+            
+            }).catch(error => {
+                console.error('Error loading or processing CSV:', error);
+            });
+        }
+
+
+        // Load initial data
+        loadChartData(document.getElementById('genre-selector').value);
+    </script>
+</body>
+</html>
